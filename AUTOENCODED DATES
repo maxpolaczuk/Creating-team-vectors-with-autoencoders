@@ -1,0 +1,365 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Autoencoding Dates in CS:GO Data\n",
+    "Projecting large dimensional time vectors into smaller vectors to be graphed"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "% matplotlib inline\n",
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import matplotlib.pyplot as plt\n",
+    "import matplotlib.image as mpimg\n",
+    "from keras.layers import Input, Dense\n",
+    "from keras.models import Model"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 88,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "(558, 1363)\n"
+     ]
+    }
+   ],
+   "source": [
+    "# open in data file\n",
+    "dat = pd.read_csv('Time_Matrix.csv')\n",
+    "\n",
+    "## construct input matrix\n",
+    "inps = np.transpose(np.array(dat.ix[:,1:(dat.shape[1]-1)] ) )/5 # transpose to make it for each date we have a vector of teams playing\n",
+    "# need to also add the vector of idx number\n",
+    "dates = np.reshape(np.arange(dat.shape[1]-2),(dat.shape[1]-2,1))\n",
+    "dates = dates/np.max(dates)\n",
+    "\n",
+    "inps = np.concatenate( (inps, dates), axis = 1)\n",
+    "\n",
+    "print(inps.shape)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "collapsed": false
+   },
+   "source": [
+    "### Use autoencoder now\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 90,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "''' define the model architecture '''\n",
+    "# this returns a tensor\n",
+    "inputs = Input(shape=(np.shape(inps)[1],))\n",
+    "\n",
+    "encoding_dim = 3\n",
+    "# a layer instance is callable on a tensor, and returns a tensor\n",
+    "ENCOD = Dense(encoding_dim, activation='relu')(inputs)\n",
+    "DECOD = Dense(np.shape(inps)[1], activation='relu')(ENCOD)\n",
+    "#predictions = Dense(10, activation='softmax')(x)\n",
+    "\n",
+    "# this creates a model that includes\n",
+    "# the Input layer and three Dense layers\n",
+    "autoencoder = Model(input=inputs, output=DECOD)\n",
+    "\n",
+    "# this model maps an input to its encoded representation\n",
+    "encoder = Model(inputs, output = ENCOD)\n",
+    "\n",
+    "# create a placeholder for an encoded (N-dimensional) input\n",
+    "encoded_input = Input(shape=(encoding_dim,))\n",
+    "# retrieve the last layer of the autoencoder model\n",
+    "#decoder_layer = autoencoder.layers[-1]\n",
+    "# create the decoder model\n",
+    "#decoder = Model(input=encoded_input, output=decoder_layer(encoded_input))\n",
+    "\n",
+    "### compile the model...\n",
+    "autoencoder.compile(optimizer='rmsprop', loss='mse')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Train this model now!!!\n",
+    "- Many epochs have been run but showing only 1 for sake of presentation"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 125,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Epoch 1/1\n",
+      "558/558 [==============================] - 0s - loss: 0.0048     \n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "<keras.callbacks.History at 0x7fc3e5b1a240>"
+      ]
+     },
+     "execution_count": 125,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "autoencoder.fit(inps, inps,\n",
+    "                nb_epoch=1,\n",
+    "                batch_size=1,\n",
+    "                shuffle=True )# ,validation_split=0.3) # obviously increase the epoch's if not trained - so far about 200 has been ran"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 93,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "' this is for testing how well at reconstructing inputs the net is '"
+      ]
+     },
+     "execution_count": 93,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "''' this is for testing how well at reconstructing inputs the net is '''\n",
+    "#autoencoder.predict(rosterz) - # uncomment if needed"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 94,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "''' save the predictions... '''\n",
+    "encoded_inputs = pd.DataFrame(encoder.predict(inps))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 112,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "''' make names for months '''\n",
+    "encoded_inputs['Month'] =  np.mod(np.reshape(np.arange(dat.shape[1]-2),(dat.shape[1]-2,1)), 12) \n",
+    "mth = []\n",
+    "for i in range(len(encoded_inputs)):\n",
+    "    if(encoded_inputs['Month'][i] == 0):\n",
+    "        mth.append('January')\n",
+    "    elif(encoded_inputs['Month'][i] == 1):\n",
+    "        mth.append('February')\n",
+    "    elif(encoded_inputs['Month'][i] == 2):\n",
+    "        mth.append('March')\n",
+    "    elif(encoded_inputs['Month'][i] == 3):\n",
+    "        mth.append('April')\n",
+    "    elif(encoded_inputs['Month'][i] == 4):\n",
+    "        mth.append('May')\n",
+    "    elif(encoded_inputs['Month'][i] == 5):\n",
+    "        mth.append('June')\n",
+    "    elif(encoded_inputs['Month'][i] == 6):\n",
+    "        mth.append('July')\n",
+    "    elif(encoded_inputs['Month'][i] == 7):\n",
+    "        mth.append('August')\n",
+    "    elif(encoded_inputs['Month'][i] == 8):\n",
+    "        mth.append('September')\n",
+    "    elif(encoded_inputs['Month'][i] == 9):\n",
+    "        mth.append('October')\n",
+    "    elif(encoded_inputs['Month'][i] == 10):\n",
+    "        mth.append('November')\n",
+    "    elif(encoded_inputs['Month'][i] == 11):\n",
+    "        mth.append('December')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 119,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# save time matrix finalized:\n",
+    "encoded_inputs['IDX'] = np.reshape(np.arange(dat.shape[1]-2),(dat.shape[1]-2,1))\n",
+    "encoded_inputs['IDX']=encoded_inputs['IDX'].apply(str)\n",
+    "\n",
+    "encoded_inputs['MTH']  = mth\n",
+    "encoded_inputs['COMB'] = encoded_inputs['MTH'] + encoded_inputs['IDX'] \n",
+    "encoded_inputs.to_csv('ENCODED TIME.csv')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Use plotly to show some of the autoencoded dates..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 123,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<iframe id=\"igraph\" scrolling=\"no\" style=\"border:none;\" seamless=\"seamless\" src=\"https://plot.ly/~polaczmaks/388.embed\" height=\"525px\" width=\"100%\"></iframe>"
+      ],
+      "text/plain": [
+       "<plotly.tools.PlotlyDisplay object>"
+      ]
+     },
+     "execution_count": 123,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "import plotly.plotly as py\n",
+    "import plotly.graph_objs as go\n",
+    "import plotly \n",
+    "plotly.tools.set_credentials_file(username='', api_key='') # removed plotly membership for privacy now...\n",
+    "\n",
+    "trace1 = go.Scatter3d(\n",
+    "    x=encoded_inputs.ix[:100,0],\n",
+    "    y=encoded_inputs.ix[:100,1],\n",
+    "    z=encoded_inputs.ix[:100,2],\n",
+    "    mode='markers',\n",
+    "    text =  encoded_inputs.ix[:100,6]  , \n",
+    "    marker=dict(\n",
+    "        size=4,\n",
+    "        line=dict(\n",
+    "            color='rgba(217, 217, 217, 1)',\n",
+    "            width=0.5\n",
+    "        ),\n",
+    "        opacity=1\n",
+    "    )\n",
+    ")\n",
+    "\n",
+    "data = [trace1]\n",
+    "layout = go.Layout(\n",
+    "    margin=dict(\n",
+    "        l=0,\n",
+    "        r=0,\n",
+    "        b=0,\n",
+    "        t=0\n",
+    "    )\n",
+    ")\n",
+    "\n",
+    "fig = go.Figure(data=data, layout=layout)\n",
+    "py.iplot(fig, filename='simple-3d-scatter')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The key takeaway is that the data was randomly generated, so it is not likely to capture any visible relationships. Once we use the real data this should result in a meaningful mapping"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Once trained we can save the autoencoder for future use"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 124,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "# save the trained model file:\n",
+    "\n",
+    "from keras.models import load_model\n",
+    "\n",
+    "autoencoder.save('time_autoencoder.h5')  # creates a HDF5 file 'my_model.h5'\n",
+    "\n",
+    "#del model  # deletes the existing model - uncomment when needed\n",
+    "\n",
+    "# loads in a compiled model\n",
+    "# identical to the previous one - uncomment when needed\n",
+    "#autoencoder = load_model('roster_autoencoder.h5')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "anaconda-cloud": {},
+  "kernelspec": {
+   "display_name": "Python [Root]",
+   "language": "python",
+   "name": "Python [Root]"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.5.2"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 0
+}
